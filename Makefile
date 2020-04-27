@@ -1,7 +1,7 @@
 # Makefile
 # Create tsh binary
 SRC=main.c
-FLAGS=-Wall -Werror -pedantic -Wextra
+FLAGS=-Wall -pedantic -Wextra -pthread -lpthread # -Werror
 CC=gcc
 BIN=tsh
 ZIP=xwilla00.zip
