@@ -13,10 +13,11 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <dirent.h>
+#include <fcntl.h>
 
 #define BUFF_SIZE 512
 #define OUT_APPEND 1
-#define OUT_NEW 2cat
+#define OUT_NEW 2
 
 int max_pid_cnt = 8;
 pid_t *pid;
@@ -58,7 +59,7 @@ void *read_thread(void *arg) {
 }
 
 char *get_prog_path(char *prog);
-char **parse_args(const char *buffer, char *outfile, int *out_flag);
+char **parse_args(const char *buffer, char *outfile, int *out_flag, char *infile);
 void check_pids(pid_t *pids, char **progs);
 
 int main() {
@@ -71,7 +72,8 @@ int main() {
     char **progs = (char **)malloc(max_pid_cnt * sizeof(char *));
     int pid_index = 0;
 
-    char outfile[1024];
+    char infile[256]; // linux max file length is 255
+    char outfile[256];
     int open_flag = 0;
 
     signal(SIGINT, sigint_handler);
@@ -121,11 +123,16 @@ int main() {
             }
             open_flag = 0;
             memset(outfile, 0, sizeof(outfile));
-            char **user_args = parse_args(m->buffer, &outfile, &open_flag);
+            memset(infile, 0, sizeof(infile));
+            char **user_args = parse_args(m->buffer, &outfile, &open_flag, &infile);
             if(user_args == NULL)
                 printf("Unknown command: %s", m->buffer);
             else{
                 if((*pid = fork()) == 0){
+                    if(strlen(infile)){
+                        int f = open(infile, O_RDONLY);
+                        dup2(f, 0);
+                    }
                     if(open_flag == OUT_NEW)
                         freopen(outfile,"w",stdout);
                     else if(open_flag == OUT_APPEND)
@@ -166,10 +173,8 @@ int main() {
     return 0;
 }
 
-char **parse_args(const char *buffer, char *outfile, int *open_flag){
-    int out_cnt = 0;
-    int outfile_pos = 0;
-    int ws_loaded = 0;
+char **parse_args(const char *buffer, char *outfile, int *open_flag, char *infile){
+    int out_cnt = 0, outfile_pos = 0, ws_loaded = 0;
     for(int i = 0; i < strlen(buffer); i++){
         if(out_cnt && (buffer[i] == '&' || buffer[i] == '<'))
             break;
@@ -187,6 +192,18 @@ char **parse_args(const char *buffer, char *outfile, int *open_flag){
         *open_flag = OUT_NEW;
     if(out_cnt == 2)
         *open_flag = OUT_APPEND;
+
+    int infile_pos = 0, infile_read = 0;
+    ws_loaded = 0;
+    for(int i = 0; i < strlen(buffer); i++){
+        if(infile_read && buffer[i] == ' ' && infile_pos > 0){}
+        else if(buffer[i] == ' ' && infile_read)
+            ws_loaded = 1;
+        else if(!ws_loaded && infile_read && buffer[i] != '&' && buffer[i] != '>' && buffer[i] != '\n')
+            infile[infile_pos++] = buffer[i];
+        if(buffer[i] == '<')
+            infile_read = 1;
+    }
 
     int arg_len;
     for(arg_len = 0; arg_len < BUFF_SIZE; arg_len++){
