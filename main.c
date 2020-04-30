@@ -31,7 +31,8 @@ struct monitor {
 };
 
 void sigint_handler(){
-    kill(pid, SIGCHLD);
+    kill(*pid, SIGCHLD);
+    printf("\n");
 }
 
 void *read_thread(void *arg) {
@@ -124,7 +125,7 @@ int main() {
             open_flag = 0;
             memset(outfile, 0, sizeof(outfile));
             memset(infile, 0, sizeof(infile));
-            char **user_args = parse_args(m->buffer, &outfile, &open_flag, &infile);
+            char **user_args = parse_args(m->buffer, (char *) &outfile, &open_flag, (char *) &infile);
             if(user_args == NULL)
                 printf("Unknown command: %s", m->buffer);
             else{
@@ -141,7 +142,7 @@ int main() {
                 }
                 else{
                     if(detached){
-                        printf("running %d\n", running_pids[pid_index]);
+//                        printf("running %d\n", running_pids[pid_index]);
                         waitpid(*pid, NULL, WNOHANG);
                         progs[pid_index] = (char *)malloc(BUFF_SIZE * sizeof(char));
                         strcpy(progs[pid_index], m->buffer);
@@ -175,7 +176,7 @@ int main() {
 
 char **parse_args(const char *buffer, char *outfile, int *open_flag, char *infile){
     int out_cnt = 0, outfile_pos = 0, ws_loaded = 0;
-    for(int i = 0; i < strlen(buffer); i++){
+    for(unsigned int i = 0; i < strlen(buffer); i++){
         if(out_cnt && (buffer[i] == '&' || buffer[i] == '<'))
             break;
         if(buffer[i] == '>')
@@ -195,8 +196,8 @@ char **parse_args(const char *buffer, char *outfile, int *open_flag, char *infil
 
     int infile_pos = 0, infile_read = 0;
     ws_loaded = 0;
-    for(int i = 0; i < strlen(buffer); i++){
-        if(infile_read && buffer[i] == ' ' && infile_pos > 0){}
+    for(unsigned int i = 0; i < strlen(buffer); i++){
+        if(infile_read && buffer[i] == ' ' && infile_pos == 0){}
         else if(buffer[i] == ' ' && infile_read)
             ws_loaded = 1;
         else if(!ws_loaded && infile_read && buffer[i] != '&' && buffer[i] != '>' && buffer[i] != '\n')
@@ -205,14 +206,14 @@ char **parse_args(const char *buffer, char *outfile, int *open_flag, char *infil
             infile_read = 1;
     }
 
-    int arg_len;
+    unsigned int arg_len;
     for(arg_len = 0; arg_len < BUFF_SIZE; arg_len++){
         if(buffer[arg_len] == '\n' || buffer[arg_len] == '<' || buffer[arg_len] == '>' || buffer[arg_len] == '&')
             break;
     }
     char input[arg_len+1];
     int token_cnt = 1;
-    for(int i = 0; i < arg_len; i++){
+    for(unsigned int i = 0; i < arg_len; i++){
         input[i] = buffer[i];
         if(buffer[i] == ' ' && i < arg_len - 1)
             token_cnt++;
@@ -280,10 +281,10 @@ char *get_prog_path(char *prog){
 void check_pids(pid_t *pids, char **progs){
     for(int i = 0; i < max_pid_cnt; i++){
         if(pids[i] > 0){
-            int stat;
+            int stat = pids[i];
             waitpid(pids[i], &stat, WNOHANG);
             if(stat == 0){
-                printf("DONE\t\t%s", progs[i]);
+                printf("[%d] DONE\t%s", i, progs[i]);
                 free(progs[i]);
                 progs[i] = NULL;
                 pids[i] = 0;
